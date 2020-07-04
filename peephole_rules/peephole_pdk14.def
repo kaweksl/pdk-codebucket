@@ -223,6 +223,18 @@ replace {
     slc %1
 }
 
+//if(TimeoutCount & 0x400) {
+replace {
+	mov	a, _TimeoutCount+1
+	mov	p, a
+	mov	a, _TimeoutCount+0
+	t1sn	p, #2
+	goto	%1
+} by {
+    t1sn	_TimeoutCount+1, #2
+    goto	%1
+}
+
 
 // ** OLD ones 
 // I2CData = (I2CData << 1) | (SDA);
