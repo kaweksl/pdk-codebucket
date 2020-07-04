@@ -233,3 +233,32 @@ void GetByte() {
 	return;
 }
 #endif
+
+#define I2CSTART() \
+	if(!SCL) goto cleanReturn; \
+	PassHighSCL(); \
+	GetByte(); \
+	if(I2CFlags & I2C_ABORT) goto cleanReturn; \
+	uint8_t addrMask = 0xFE; \
+	if ((I2CData & addrMask) == i2cAddr) { \
+		SET_BITMASK(I2CFlags, I2C_ADDR_MATCH); \
+	} \
+	if ( !(I2CFlags & I2C_ADDR_MATCH)) goto cleanReturn; \
+	sendACK();
+
+
+		// // ** Start condition detection **
+		// if(!SCL) goto cleanReturn; 
+		// PassHighSCL();
+
+		// // ** Address sampling
+		// GetByte();
+        // if(I2CFlags & I2C_ABORT) goto cleanReturn; //If error occured, exit cleanly
+
+		// uint8_t addrMask = 0xFE; //Fixes compiler bug that creates variable for '0xFE', saves 1 byte RAM
+		// if ((I2CData & addrMask) == i2cAddr) {
+		// 	SET_BITMASK(I2CFlags, I2C_ADDR_MATCH);
+		// }
+		// if ( !(I2CFlags & I2C_ADDR_MATCH)) goto cleanReturn;
+		// sendACK();
+
