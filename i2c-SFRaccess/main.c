@@ -27,53 +27,12 @@ Tested on PFS154 and PMS150C-u08
 #include <stdio.h>
 #include "pdk.h"
 
+#define SET_I2C_TIMEOUT 1
+#define SET_I2C_STOP 1
+#define SET_I2C_CONFLICT 0
+
 #define i2cAddr (uint8_t)(0x25<<1)
-
-#define __reset()      __asm__("reset\n")
-
-#define SET_BIT(reg,bit)			reg |= (uint8_t)(1<<bit)
-#define SET_BITMASK(reg,bitmask)	reg |= bitmask
-#define TGL_BIT(reg,bit)			reg ^= (uint8_t)(1<<bit)
-#define CLR_BIT(reg,bit)			reg &= (uint8_t)~(1<<bit)
-#define CLR_BITMASK(reg,bitmask)	reg &= ~bitmask
-#define GET_BIT(reg,bit)    		reg & (uint8_t)(1<<bit)
-
-#define BIT0	(uint8_t) 0x01
-#define BIT1	(uint8_t) 0x02
-#define BIT2	(uint8_t) 0x04
-#define BIT3	(uint8_t) 0x08
-#define BIT4	(uint8_t) 0x10
-#define BIT5	(uint8_t) 0x20
-#define BIT6	(uint8_t) 0x40
-#define BIT7	(uint8_t) 0x80
-
-#define PULLSDA()		__set1(PAC, SDAPIN); \
-						__set0(PA, SDAPIN);
-						
-#define RELEASESDA()	__set0(PAC, SDAPIN);
-
-#define PULLSCL()		__set1(PAC, SCLPIN); \
-						__set0(PA, SCLPIN); 
-#define RELEASESCL()	__set0(PAC, SCLPIN);
-
-#define SCLPIN 4
-#define SDAPIN 0
-#define INTPIN 3
-
-#define SCL ((uint8_t)(PA & (1<<SCLPIN)))
-#define SDA ((uint8_t)(PA & (1<<SDAPIN)))
-
-//Reset interupt - set pin as input with pull-up
-#define RST_INT()	__set0(PAC,INTPIN); \
-					__set1(PAPH,INTPIN);
-//Set interrupt - pin as output low
-#define SET_INT()	__set1(PAC,INTPIN); \
-					__set0(PA, INTPIN);
-
-
-#define DEBUGPIN 6
-#define DEBUGPULSE() 	__set1(PA,DEBUGPIN);\
-						__set0(PA,DEBUGPIN);
+#include "i2c.c"
 
 typedef enum
 {
@@ -85,31 +44,6 @@ typedef enum
 	RESETDEVICE,		//software restart
 } eI2CCommands;
 
-typedef enum
-{
-	I2C_ABORT =		BIT0,	//Abort flag, set when error or STOP detected
-	I2C_STOP =		BIT1,	//Stop detected
-	I2C_TIMEOUT =	BIT2,	//Timeout
-	I2C_ADDRCOMM =	BIT3,	//Common address used
-	I2C_ADDR_MATCH=	BIT4,	//Main address match
-	I2C_CONFLICT=	BIT5,	//Conflict detected while sending
-} eI2CFlags;	//Bit mask for I2C state flags
-
-// union tSendBuf {
-// 	uint16_t 	whole;
-// 	struct {
-// 		uint8_t low;
-// 		uint8_t high;
-// 	} byte ;
-// }; 
-
-//Variables (and func with variables) that gonna be accessed via bit operations (set1 set0 t1sn t0sn)
-// have to be in first part of memory (0x00-0x0F - pdk13; 0x3F - pdk14 ; 0x7F - pdk15)
-volatile uint8_t I2CData;		//Main buffer for I2C data (destructive at SendI2CData)
-volatile uint8_t I2CFlags = 0;	//Flags used in I2C frame, reseted after each frame
-volatile uint8_t I2CSDA = 0;	//Holds SDA state when SCL is low, used to check for STOP condition
-
-//Placing variables that don't need bit access
 volatile uint8_t intreg[2];	//Internall register to hold some stuff
 
 
@@ -279,84 +213,6 @@ void SetSFR(uint8_t addr, uint8_t value) {
 }
 #endif
 
-
-
-void PassLowSCL() {
-    uint8_t count = 0;
-    while(!SCL) {
-		I2CSDA = SDA;
-        count++;
-        if(count & 0x80) {
-            SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_TIMEOUT);
-        }
-		
-        if(I2CFlags & I2C_ABORT) break;
-    }
-}
-
-
-void PassHighSCL() {
-    uint8_t count = 0;
-    while(SCL) {
-		if(SDA != I2CSDA) {
-			SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_STOP);
-		}
-        if(count & 0x80) {
-            SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_TIMEOUT);
-        }
-        if(I2CFlags & I2C_ABORT) break;
-		count++;
-    }
-}
-
-void sendACK() {
-	PULLSDA();    
-	PassLowSCL();
-	PassHighSCL();
-	RELEASESDA();
-}
-
-// Send byte in buffer over i2c, sends MSB first
-void SendI2CData() {
-	uint8_t b = 0;
-	while(1) {
-		if( !(I2CData & 0x80) ) PULLSDA();	//Pull SDA low if MSB is 0
-		b++;
-		PassLowSCL();
-		//Check if SDA is low when it should't be, indication of another deivce with same addr but higher priority (lower value) data 
-		if( (I2CData & 0x80) ) { 
-			if(!SDA) {
-				SET_BITMASK(I2CFlags,I2C_ABORT);
-				SET_BITMASK(I2CFlags,I2C_CONFLICT);
-				break;
-			}
-		}
-		I2CData <<=1;
-		PassHighSCL();
-		if( (I2CData & 0x80) ) RELEASESDA(); //If next bit is high release SDA
-		if (b == 8 ) break;
-	}
-	RELEASESDA();
-}
-
-// GetByte samples incomig bit, that routine must be quite fast
-// Higly depends on peephole optimization, won't work without it
-void GetByte() {
-	I2CData = 1; //That 1 in carry flag gonna mean that we have 8 bits
-	while(1) {
-		PassLowSCL();
-		I2CData = (I2CData << 1) | (SDA);
-		if (FLAG & BIT1) break; //Check if carry flag is 1 aka buffer inital 1 has beed shifted out, requires that bit shift above is done by 'SLC' asm ins.
-		PassHighSCL();
-		if(I2CFlags & I2C_ABORT) break;
-	}
-	PassHighSCL();
-	return;
-}
-
 unsigned char _sdcc_external_startup(void)
 {
   EASY_PDK_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
@@ -370,20 +226,7 @@ void ISR(void) __interrupt(0)
     
 	if( INTRQ & INTRQ_PA0 )                       //PA0 interrupt request?
 	{
-		// ** Start condition detection **
-		if(!SCL) goto cleanReturn; 
-		PassHighSCL();
-
-		// ** Address sampling
-		GetByte();
-        if(I2CFlags & I2C_ABORT) goto cleanReturn; //If error occured, exit cleanly
-
-		uint8_t addrMask = 0xFE; //Fixes compiler bug that creates variable for '0xFE', saves 1 byte RAM
-		if ((I2CData & addrMask) == i2cAddr) {
-			SET_BITMASK(I2CFlags, I2C_ADDR_MATCH);
-		}
-		if ( !(I2CFlags & I2C_ADDR_MATCH)) goto cleanReturn;
-		sendACK();
+		I2CSTART();
         // ** Read or Write operations
 		if(I2CData & 1) { 				//Master Read operation
 				I2CData = intreg[0];
@@ -461,11 +304,7 @@ void ISR(void) __interrupt(0)
 						break;
 				}
 		}
-		cleanReturn:
-		RELEASESDA();
-		I2CFlags = 0;
-		I2CData = 0;
-		I2CSDA = 0;
+		CLEANRETURNBLOCK();
 		INTRQ &= ~INTRQ_PA0; //Clear interrupt flag
 	} // ** if ( INTRQ & INTRQ_PA0 )
     //INTRQ = 0;
