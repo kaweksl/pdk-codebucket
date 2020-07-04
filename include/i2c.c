@@ -35,11 +35,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 	#define INTPIN 3
 #endif
 
-#ifndef SET_I2C_TIMEOUT
-	#define SET_I2C_TIMEOUT 0x400
-#endif
-
-
 #if SET_I2C_TIMEOUT != 0
 	#define I2C_F_TIMEOUT
 #endif
@@ -149,7 +144,7 @@ void PassLowSCL() {
 		#endif
 		#ifdef I2C_F_TIMEOUT
 			TimeoutCount++;
-			if(TimeoutCount & SET_I2C_TIMEOUT) {
+			if(TimeoutCount & 0x400) {
 				SET_BITMASK(I2CFlags,I2C_ABORT);
 				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
 			}
@@ -172,7 +167,7 @@ void PassHighSCL() {
 			}
 		#endif
 		#ifdef I2C_F_TIMEOUT
-			if(TimeoutCount & SET_I2C_TIMEOUT) {
+			if(TimeoutCount & 0x400) {
 				SET_BITMASK(I2CFlags,I2C_ABORT);
 				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
 			}
