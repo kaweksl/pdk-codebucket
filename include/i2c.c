@@ -35,6 +35,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 	#define INTPIN 3
 #endif
 
+#ifndef SET_I2C_TIMEOUT
+	#define SET_I2C_TIMEOUT 0x400
+#endif
+
 
 #if SET_I2C_TIMEOUT != 0
 	#define I2C_F_TIMEOUT
@@ -64,31 +68,37 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BIT6	(uint8_t) 0x40
 #define BIT7	(uint8_t) 0x80
 
-#define PULLSDA()		__set1(PAC, SDAPIN); \
-						__set0(PA, SDAPIN);
+#define PULLSDA() \
+	__set1(PAC, SDAPIN); \
+	__set0(PA, SDAPIN);
 						
-#define RELEASESDA()	__set0(PAC, SDAPIN);
+#define RELEASESDA() \
+	__set0(PAC, SDAPIN);
 
-#define PULLSCL()		__set1(PAC, SCLPIN); \
-						__set0(PA, SCLPIN); 
-#define RELEASESCL()	__set0(PAC, SCLPIN);
-
+#define PULLSCL() \
+	__set1(PAC, SCLPIN); \
+	__set0(PA, SCLPIN); 
+#define RELEASESCL() \
+	__set0(PAC, SCLPIN);
 
 
 #define SCL ((uint8_t)(PA & (1<<SCLPIN)))
 #define SDA ((uint8_t)(PA & (1<<SDAPIN)))
 
 //Reset interupt - set pin as input with pull-up
-#define RST_INT()	__set0(PAC,INTPIN); \
-					__set1(PAPH,INTPIN);
+#define RST_INT() \
+	__set0(PAC,INTPIN); \
+	__set1(PAPH,INTPIN);
 //Set interrupt - pin as output low
-#define SET_INT()	__set1(PAC,INTPIN); \
-					__set0(PA, INTPIN);
+#define SET_INT() \
+	__set1(PAC,INTPIN); \
+	__set0(PA, INTPIN);
 
 
 #define DEBUGPIN 6
-#define DEBUGPULSE() 	__set1(PA,DEBUGPIN);\
-						__set0(PA,DEBUGPIN);
+#define DEBUGPULSE() \
+	__set1(PA,DEBUGPIN);\
+	__set0(PA,DEBUGPIN);
 
 #ifdef I2C_F_STOP
 	#define CLEANRETURNBLOCK() \
@@ -122,10 +132,10 @@ typedef enum
 volatile uint8_t I2CData;		//Main buffer for I2C data (destructive at SendI2CData)
 volatile uint8_t I2CFlags = 0;	//Flags used in I2C frame, reseted after each frame
 #ifdef I2C_F_STOP
-volatile uint8_t I2CSDA = 0;	//Holds SDA state when SCL is low, used to check for STOP condition
+	volatile uint8_t I2CSDA = 0;	//Holds SDA state when SCL is low, used to check for STOP condition
 #endif
 #ifdef I2C_F_TIMEOUT
-	volatile uint8_t TimeoutCount;  //Timout counter
+	uint16_t TimeoutCount;  //Timout counter
 #endif
 
 #ifndef OWN_PASSLOWSCL
@@ -139,11 +149,10 @@ void PassLowSCL() {
 		#endif
 		#ifdef I2C_F_TIMEOUT
 			TimeoutCount++;
-			if(TimeoutCount & 0x80) {
+			if(TimeoutCount & SET_I2C_TIMEOUT) {
 				SET_BITMASK(I2CFlags,I2C_ABORT);
 				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
 			}
-			
 			if(I2CFlags & I2C_ABORT) break;
 		#endif
 	}
@@ -153,7 +162,7 @@ void PassLowSCL() {
 #ifndef OWN_PASSHIGHSCL
 void PassHighSCL() {
 	#ifdef I2C_F_TIMEOUT
-	uint8_t TimeoutCount = 0;
+		TimeoutCount = 0;
 	#endif
 	while(SCL) {
 		#ifdef I2C_F_STOP
@@ -163,7 +172,7 @@ void PassHighSCL() {
 			}
 		#endif
 		#ifdef I2C_F_TIMEOUT
-			if(TimeoutCount & 0x80) {
+			if(TimeoutCount & SET_I2C_TIMEOUT) {
 				SET_BITMASK(I2CFlags,I2C_ABORT);
 				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
 			}
