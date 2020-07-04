@@ -19,9 +19,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include "pdk.h"
 
-
+// Default settings
 #ifndef i2cAddr
-    #define i2cAddr (uint8_t)(0x25<<1)
+	#define i2cAddr (uint8_t)(0x25<<1)
+#endif
+
+#ifndef SCLPIN 
+	#define SCLPIN 4
+#endif
+
+#ifndef SDAPIN
+	#define SDAPIN 0
+#endif
+#ifndef INTPIN
+	#define INTPIN 3
+#endif
+
+
+#if SET_I2C_TIMEOUT != 0
+	#define I2C_F_TIMEOUT
+#endif
+#if SET_I2C_STOP != 0
+	#define I2C_F_STOP
+#endif
+#if SET_I2C_CONFLICT != 0
+	#define I2C_F_CONFLICT
 #endif
 
 #define __reset()      __asm__("reset\n")
@@ -51,9 +73,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						__set0(PA, SCLPIN); 
 #define RELEASESCL()	__set0(PAC, SCLPIN);
 
-#define SCLPIN 4
-#define SDAPIN 0
-#define INTPIN 3
+
 
 #define SCL ((uint8_t)(PA & (1<<SCLPIN)))
 #define SDA ((uint8_t)(PA & (1<<SDAPIN)))
@@ -70,18 +90,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEBUGPULSE() 	__set1(PA,DEBUGPIN);\
 						__set0(PA,DEBUGPIN);
 
-#define CLEANRETURNBLOCK() \
-        cleanReturn:\
-		RELEASESDA();\
-		I2CFlags = 0;\
-        I2CData = 0;\
-		I2CSDA = 0;
+#ifdef I2C_F_STOP
+	#define CLEANRETURNBLOCK() \
+			cleanReturn:\
+			RELEASESDA();\
+			I2CFlags = 0;\
+			I2CData = 0;\
+			I2CSDA = 0;
+#else
+	#define CLEANRETURNBLOCK() \
+			cleanReturn:\
+			RELEASESDA();\
+			I2CFlags = 0;\
+			I2CData = 0;
+#endif
+
 
 typedef enum
 {
 	I2C_ABORT =		BIT0,	//Abort flag, set when error or STOP detected
 	I2C_STOP =		BIT1,	//Stop detected
-    I2C_TIMEOUT =	BIT2,	//Timeout
+	I2C_TIMEOUT =	BIT2,	//Timeout
 	I2C_ADDRCOMM =	BIT3,	//Common address used
 	I2C_ADDR_MATCH=	BIT4,	//Main address match
 	I2C_CONFLICT=	BIT5,	//Conflict detected while sending
@@ -92,40 +121,58 @@ typedef enum
 // have to be in first part of memory (0x00-0x0F - pdk13; 0x3F - pdk14 ; 0x7F - pdk15)
 volatile uint8_t I2CData;		//Main buffer for I2C data (destructive at SendI2CData)
 volatile uint8_t I2CFlags = 0;	//Flags used in I2C frame, reseted after each frame
+#ifdef I2C_F_STOP
 volatile uint8_t I2CSDA = 0;	//Holds SDA state when SCL is low, used to check for STOP condition
-volatile uint8_t TimoutCount;  //Timout counter
+#endif
+#ifdef I2C_F_TIMEOUT
+	volatile uint8_t TimeoutCount;  //Timout counter
+#endif
 
 #ifndef OWN_PASSLOWSCL
 void PassLowSCL() {
-    TimoutCount = 0;
-    while(!SCL) {
-		I2CSDA = SDA;
-        TimoutCount++;
-        if(TimoutCount & 0x80) {
-            SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_TIMEOUT);
-        }
-		
-        if(I2CFlags & I2C_ABORT) break;
-    }
+	#ifdef I2C_F_TIMEOUT
+		TimeoutCount = 0;
+	#endif
+	while(!SCL) {
+		#ifdef I2C_F_STOP
+			I2CSDA = SDA;
+		#endif
+		#ifdef I2C_F_TIMEOUT
+			TimeoutCount++;
+			if(TimeoutCount & 0x80) {
+				SET_BITMASK(I2CFlags,I2C_ABORT);
+				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
+			}
+			
+			if(I2CFlags & I2C_ABORT) break;
+		#endif
+	}
 }
 #endif
 
 #ifndef OWN_PASSHIGHSCL
 void PassHighSCL() {
-    uint8_t TimoutCount = 0;
-    while(SCL) {
-		if(SDA != I2CSDA) {
-			SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_STOP);
-		}
-        if(TimoutCount & 0x80) {
-            SET_BITMASK(I2CFlags,I2C_ABORT);
-			SET_BITMASK(I2CFlags,I2C_TIMEOUT);
-        }
-        if(I2CFlags & I2C_ABORT) break;
-		TimoutCount++;
-    }
+	#ifdef I2C_F_TIMEOUT
+	uint8_t TimeoutCount = 0;
+	#endif
+	while(SCL) {
+		#ifdef I2C_F_STOP
+			if(SDA != I2CSDA) {
+				SET_BITMASK(I2CFlags,I2C_ABORT);
+				SET_BITMASK(I2CFlags,I2C_STOP);
+			}
+		#endif
+		#ifdef I2C_F_TIMEOUT
+			if(TimeoutCount & 0x80) {
+				SET_BITMASK(I2CFlags,I2C_ABORT);
+				SET_BITMASK(I2CFlags,I2C_TIMEOUT);
+			}
+		#endif
+		if(I2CFlags & I2C_ABORT) break;
+		#ifdef I2C_F_TIMEOUT
+			TimeoutCount++;
+		#endif
+	}
 }
 #endif
 
@@ -147,14 +194,16 @@ void SendI2CData() {
 		if( !(I2CData & 0x80) ) PULLSDA();	//Pull SDA low if MSB is 0
 		b++;
 		PassLowSCL();
-		//Check if SDA is low when it should't be, indication of another deivce with same addr but higher priority (lower value) data 
-		if( (I2CData & 0x80) ) { 
-			if(!SDA) {
-				SET_BITMASK(I2CFlags,I2C_ABORT);
-				SET_BITMASK(I2CFlags,I2C_CONFLICT);
-				break;
+		#ifdef I2C_F_CONFLICT
+			//Check if SDA is low when it should't be, indication of another deivce with same addr but higher priority (lower value) data 
+			if( (I2CData & 0x80) ) { 
+				if(!SDA) {
+					SET_BITMASK(I2CFlags,I2C_ABORT);
+					SET_BITMASK(I2CFlags,I2C_CONFLICT);
+					break;
+				}
 			}
-		}
+		#endif
 		I2CData <<=1;
 		PassHighSCL();
 		if( (I2CData & 0x80) ) RELEASESDA(); //If next bit is high release SDA
