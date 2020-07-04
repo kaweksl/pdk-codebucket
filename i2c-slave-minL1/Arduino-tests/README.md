@@ -1,1 +1,0 @@
-Arduino code that is used to test & control device that uses firmware above
