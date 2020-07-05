@@ -17,7 +17,7 @@ currently it can: set fan speed trough pwm duty cycle,
 read speed in hertz and RPM.
 It contains some tips how to read/write t16 counter, use comparator as additional pin change interrupt
 
-**i2c-slave-minL1(L2)** - some bare minimum i2c slave implementation
+**i2c-slave** - some bare minimum i2c slave implementation
 
 **WARNING:** all that code depends on SDCC peephole optimization.
 It's pattern search&replace on asm code. I have wrote some rules to meet timing requirements of i2c communication,
