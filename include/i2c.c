@@ -31,9 +31,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef SDAPIN
 	#define SDAPIN 0
 #endif
-#ifndef INTPIN
-	#define INTPIN 3
-#endif
 
 #if SET_I2C_TIMEOUT != 0
 	#define I2C_F_TIMEOUT
@@ -79,16 +76,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define SCL ((uint8_t)(PA & (1<<SCLPIN)))
 #define SDA ((uint8_t)(PA & (1<<SDAPIN)))
-
-//Reset interupt - set pin as input with pull-up
-#define RST_INT() \
-	__set0(PAC,INTPIN); \
-	__set1(PAPH,INTPIN);
-//Set interrupt - pin as output low
-#define SET_INT() \
-	__set1(PAC,INTPIN); \
-	__set0(PA, INTPIN);
-
 
 #define DEBUGPIN 6
 #define DEBUGPULSE() \
