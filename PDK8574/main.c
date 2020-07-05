@@ -57,6 +57,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define i2cAddr (uint8_t)(0x25<<1)
 #include "i2c.c"
 
+#define INTPIN 3
+//Reset interupt - set pin as input with pull-up
+#define RST_INT() \
+	__set0(PAC,INTPIN); \
+	__set1(PAPH,INTPIN);
+//Set interrupt - pin as output low
+#define SET_INT() \
+	__set1(PAC,INTPIN); \
+	__set0(PA, INTPIN);
+
+
 uint8_t desiredState = 0xFF; //Used for pin change interrupt
 
 void SendI2CData() {
