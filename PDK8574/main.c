@@ -45,7 +45,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 #include <stdio.h>
-#include "pdk.h"
+#include "pdk-includes/device.h"
+#include "easy-pdk-includes/calibrate.h"
 
 #define SET_I2C_TIMEOUT 1
 #define SET_I2C_STOP 1
@@ -96,9 +97,9 @@ void sendACK() {
 
 unsigned char _sdcc_external_startup(void)
 {
-  EASY_PDK_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
-  EASY_PDK_INIT_SYSCLOCK_8MHZ();                //use 8MHz sysclock
-  EASY_PDK_USE_FACTORY_BGTR()
+  PDK_SET_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
+  PDK_USE_8MHZ_IHRC_SYSCLOCK();                //use 8MHz sysclock
+  PDK_USE_FACTORY_BGTR();
   EASY_PDK_CALIBRATE_IHRC(8000000,4000);        //tune SYSCLK to 8MHz @ 4.000V
   return 0;                                     //perform normal initialization
 }
@@ -141,8 +142,8 @@ void main(void)
 {
 
 	// IO Setup
-	PAC = (BIT6 ) & ~BIT0 & ~BIT4 & ~BIT3; 	//PA0.PA4 as input (I2C), PA3 as INT, PA6 DEBUG
-	PADIER = PADIE_PA0_WAKEUP_ENABLE | PADIE_PA4_WAKEUP_ENABLE | PADIE_PA3_ENABLE; //Enable digital input only on pins PA0 PA4
+	PAC = (PIN6 ) & ~PIN0 & ~PIN4 & ~PIN3; 	//PA0.PA4 as input (I2C), PA3 as INT, PA6 DEBUG
+	PADIER = PIN0 | PIN4 | PIN3; //Enable digital input only on pins PA0 PA4
 	PBPH = 0xFF;						//Enable port B pull-ups at startup
 
 

@@ -1,5 +1,5 @@
 SDCC=/home/me/repos/sdcc/bin/sdcc
-EASYPDKPROG=/home/me/repos/easy-pdk-programmer-software/easypdkprog
+EASYPDKPROG=/home/me/share-ja/repos/easy-pdk-programmer-software/easypdkprog
 
 OUTNAME="i2c_SFRaccess"
 OUTDIR=build

@@ -27,7 +27,8 @@ Tested on PFS154
 ** */
 #include <stdint.h>
 #include <stdio.h>
-#include "pdk.h"
+#include "pdk-includes/device.h"
+#include "easy-pdk-includes/calibrate.h"
 
 #define SET_I2C_TIMEOUT 1
 #define SET_I2C_STOP 1
@@ -49,8 +50,8 @@ volatile uint8_t intreg[2];	//Internall register to hold some stuff
 
 unsigned char _sdcc_external_startup(void)
 {
-  EASY_PDK_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
-  EASY_PDK_INIT_SYSCLOCK_8MHZ();                //use 8MHz sysclock
+  PDK_SET_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
+  PDK_USE_8MHZ_IHRC_SYSCLOCK();                //use 8MHz sysclock
   EASY_PDK_CALIBRATE_IHRC(8000000,4000);        //tune SYSCLK to 8MHz @ 4.000V
   return 0;                                     //perform normal initialization
 }
@@ -108,10 +109,10 @@ void main(void)
 {
 
 	//Initial pins setup
-	PAC = (BIT6 ) & ~(1<<SCLPIN) & ~(1<<SDAPIN);
+	PAC = (PIN6 ) & ~(1<<SCLPIN) & ~(1<<SDAPIN);
 
 	//Enable digital input only on pins PA0 PA4
-	PADIER = PADIE_PA0_WAKEUP_ENABLE | PADIE_PA4_WAKEUP_ENABLE;
+	PADIER = (1<<SCLPIN) | (1<<SDAPIN);
 
 	//Setup interrupts
 	INTEGS = INTEGS_PA0_FALLING;            //Trigger PA0 interrupt on falling edge (SDA)

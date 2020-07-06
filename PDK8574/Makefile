@@ -1,5 +1,5 @@
 SDCC=/home/me/repos/sdcc/bin/sdcc
-EASYPDKPROG=/home/me/repos/easy-pdk-programmer-software/easypdkprog
+EASYPDKPROG=/home/me/share-ja/repos/easy-pdk-programmer-software/easypdkprog
 
 OUTDIR=build
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))

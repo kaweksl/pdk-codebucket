@@ -24,7 +24,19 @@ I2c Controller for PWM FAN (PC FAN with 4 pin's)
 
 #include <stdint.h>
 #include <stdio.h>
-#include "pdk.h"
+#include "pdk-includes/device.h"
+#include "easy-pdk-includes/calibrate.h"
+
+#if defined(PFS154)
+    #define TACHOPIN 7
+    #define TACHO (PB & (1<<TACHOPIN))
+    #define GPCC_PIN GPCC_COMP_MINUS_PB7
+#elif defined(PMS150C)
+    #define TACHOPIN 7
+    #define TACHO (PA & (1<<TACHOPIN))
+    #define GPCC_PIN GPCC_COMP_MINUS_PA7
+#endif
+
 #define __reset()      __asm__("reset\n")
 
 #define CLR_BIT(reg,bit)	reg &= (uint8_t)~(1<<bit)
@@ -59,9 +71,6 @@ I2c Controller for PWM FAN (PC FAN with 4 pin's)
 
 #define SCL ((uint8_t)(PA & (1<<SCLPIN)))
 #define SDA ((uint8_t)(PA & (1<<SDAPIN)))
-
-#define FANTACHOPIN 7
-#define FANTACHO ((uint8_t)(PA & (1<<FANTACHOPIN)))
 
 typedef enum
 {
@@ -187,8 +196,8 @@ uint16_t divide(uint32_t dividend, uint32_t divisor) {
 
 unsigned char _sdcc_external_startup(void)
 {
-  EASY_PDK_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
-  EASY_PDK_INIT_SYSCLOCK_8MHZ();                //use 8MHz sysclock
+  PDK_SET_FUSE(FUSE_SECURITY_OFF|FUSE_BOOTUP_SLOW);
+  PDK_USE_8MHZ_IHRC_SYSCLOCK();                //use 8MHz sysclock
   EASY_PDK_CALIBRATE_IHRC(8000000,4000);        //tune SYSCLK to 8MHz @ 4.000V
   return 0;                                     //perform normal initialization
 }
@@ -269,7 +278,7 @@ void ISR(void) __interrupt(0)
 
     if(INTEN & INTEN_COMP) {
         if(ToDoFlags & TACHO_GOTFIRST) {
-            if(PB & BIT7) {
+            if(TACHO) {
             __set0(T16M, #5); //Stop Timer
                 //Store timer value
                 __asm__(                                 \
@@ -290,7 +299,7 @@ void ISR(void) __interrupt(0)
             }
         }
         else {
-            if(!(PB & BIT7)) {
+            if(!TACHO) {
                 __set1(T16M, #5); //Start Timer 
                 __set1(ToDoFlags, #2);
                 DEBUGPULSE();
@@ -305,11 +314,11 @@ void main(void)
 {
 
 	//Set PA6,PA7 as output and PA0.PA4 as input
-	PAC = (BIT6 ) & ~BIT0 & ~BIT4 & ~BIT7 ;
+	PAC = (PIN6 ) & ~PIN0 & ~PIN4 & ~PIN7 ;
 	//PAC = 0xC0;
 
 	//Enable digital input
-	PADIER = PADIE_PA0_WAKEUP_ENABLE | PADIE_PA4_WAKEUP_ENABLE | PADIE_PA7_WAKEUP_ENABLE;
+	PADIER = PIN0 | PIN4 | PIN3;
 
 	//Setup interrupts
 	INTEGS = INTEGS_PA0_FALLING;//Trigger PA0 interrupt on falling edge
@@ -323,11 +332,11 @@ void main(void)
     TM2C = TM2C_CLK_IHRC | TM2C_MODE_PWM | TM2C_OUT_PA3;
 
     //Setup Timer16 - it will be our frequency counter
-    T16M = T16_CLK_DIV64 ;
+    T16M = T16M_CLK_DIV64 ;
 
     //Setup Comparator as PA7 pin change interrupt 
-    GPCS = 1 & ~GPCS_COMP_CASE1 ;
-    GPCC = GPCC_COMP_ENABLE | GPCC_COMP_PLUS_VINT_R | GPCC_COMP_MINUS_PA7 | GPCC_COMP_RESULT_POSITIV ;
+    GPCS = 1 & ~GPCS_COMP_RANGE1 ;
+    GPCC = 0 & (GPCC_COMP_ENABLE | GPCC_COMP_PLUS_VINT_R | GPCC_PIN | GPCC_COMP_RESULT_POSITIV );
 
 	__engint();                 //Enable interrupt processing
     
